@@ -1,0 +1,249 @@
+/*
+
+Copyright 2020 - tomw
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+ */
+
+metadata
+{
+    definition(name: "My Leviton Switch/Dimmer", namespace: "tomw", author: "tomw", importUrl: "")
+    {
+
+        capability "Initialize"
+        capability "Refresh"
+        capability "SignalStrength"
+        capability "Switch"
+        capability "SwitchLevel"
+        
+        attribute "commStatus", "string"
+    }
+}
+
+preferences
+{
+    section
+    {
+        input name: "switch_id", type: "text", title: "Switch ID", required: true
+        input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
+    }
+}
+
+def logDebug(msg) 
+{
+    if (logEnable)
+    {
+        log.debug(msg)
+    }
+}
+
+def initialize()
+{
+    sendEvent(name: "commStatus", value: "unknown")
+    sendEvent(name: "switch", value: "unknown")
+    sendEvent(name: "level", value: "unknown")
+    sendEvent(name: "rssi", value: "unknown")
+}
+
+def refresh()
+{
+    requestRefresh()
+}    
+
+def on()
+{
+    lev_update_switch('ON')
+}
+
+def off()
+{
+    lev_update_switch('OFF')
+}
+
+def setLevel(level)
+{
+    setLevel(level, 0)
+}
+
+def setLevel(level, duration)
+{
+    lev_update_switch('ON', level)
+}
+
+def lev_update_switch(power, brightness = null)
+{
+    try
+    {
+        httpExecWithAuthCheck("PUT", genParamsMain("IotSwitches/${switch_id}", !brightness ? [power: power] : [power: power, brightness: brightness]), true)      
+        sendEvent(name: "commStatus", value: "good")
+        
+        // wait a little while and then refresh
+        unschedule()
+        runIn(2, refresh)
+    }
+    catch (Exception e)
+    {
+        logDebug("lev_update_switch failed: ${e.message}")
+        sendEvent(name: "commStatus", value: "error")
+    }
+    
+    return
+}
+
+def refreshFromMaster(id, power, brightness, rssi)
+{
+    if(id.toString() != switch_id)
+    {
+        device.updateSetting("switch_id", id.toString())
+    }
+    
+    sendEvent(name: "switch", value: (power == 'ON') ? "on" : "off")
+    sendEvent(name: "level", value: brightness)
+    sendEvent(name: "rssi", value: rssi.toInteger())
+}
+
+def requestRefresh()
+{
+    parent.refreshFromChild()
+}
+
+def checkCommStatus()
+{
+    switch(device.currentValue("commStatus"))
+    {
+        case "good":
+            logDebug("checkCommStatus() success")
+            return true
+        
+        case "error":
+        case "unknown":
+        default:
+            logDebug("checkCommStatus() failed")
+            return false
+    }
+}
+
+def getBaseURI()
+{
+    return "https://my.leviton.com/api/"
+}
+
+def genParamsMain(suffix, body = null)
+{
+    def params =
+        [
+            uri: getBaseURI() + suffix,
+            headers:
+            [
+                'Authorization': parent.getAuth()
+            ],
+            contentType: 'application/json',
+        ]
+    
+    if(body)
+    {
+        params['body'] = body
+    }
+ 
+    return params
+}
+
+def httpPutExec(params, throwToCaller = false)
+{
+    logDebug("httpPutExec(${params})")
+    
+    try
+    {
+        def result
+        httpPut(params)
+        { resp ->
+            if (resp.data)
+            {
+                logDebug("resp.data = ${resp.data}")
+                result = resp.data
+            }
+        }
+        return result
+    }
+    catch (Exception e)
+    {
+        logDebug("httpPutExec() failed: ${e.message}")
+        if(throwToCaller)
+        {
+            throw(e)
+        }
+    }
+}
+
+def httpExec(operation, params, throwToCaller = false)
+{
+    def res
+    
+    switch(operation)
+    {
+        default:
+            logDebug("unsupported Http operation")
+            break
+        
+        case "PUT":
+            res = httpPutExec(params, throwToCaller)
+            break        
+    }
+    
+    return res
+}
+
+def httpExecWithAuthCheck(operation, params, throwToCaller = false)
+{
+    def res
+    try
+    {
+        res = httpExec(operation, params, true)                
+        return res
+    }
+    catch (Exception e)
+    {
+        if(e.getResponse().getStatus().toInteger() == 401)
+        {
+            // 401 Unauthorized
+            try
+            {
+                logDebug("httpExecWithAuthCheck() auth failed.  retrying...")
+                
+                parent.refreshTokens()                
+                
+                // update with new Auth token
+                params['headers']['Authorization'] = parent.getAuth()
+                
+                res = httpExec(operation, params, true)
+                return res
+            }
+            catch (Exception e2)
+            {
+                logDebug("httpExecWithAuthCheck() failed: ${e2.message}")
+                if(throwToCaller)
+                {
+                    throw(e2)
+                }
+            }
+        }
+        else
+        {
+            if(throwToCaller)
+            {
+                throw(e)
+            }
+        }
+    }
+}

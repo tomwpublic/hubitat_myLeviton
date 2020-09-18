@@ -1,0 +1,476 @@
+/*
+
+Copyright 2020 - tomw
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+ */
+
+metadata
+{
+    definition(name: "My Leviton System", namespace: "tomw", author: "tomw", importUrl: "")
+    {
+        capability "Configuration"
+        capability "Initialize"
+        capability "Refresh"
+        
+        attribute "commStatus", "string"
+    }
+}
+
+preferences
+{
+    section
+    {
+        input "username", "text", title: "Username (email)", required: true
+        input "password", "password", title: "Password", required: true
+        input "refreshInterval", "number", title: "Refresh interval (minutes)", defaultValue: 1
+        input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
+    }
+}
+
+def logDebug(msg) 
+{
+    if (logEnable)
+    {
+        log.debug(msg)
+    }
+}
+
+def updated()
+{
+    configure()
+}
+
+def configure()
+{
+    state.clear()
+    initialize()
+}
+
+def refreshTokens()
+{
+    unschedule(refreshTokens)
+    
+    try
+    {
+        // login id and userid
+        def login = lev_login()
+        setAuth(login?.id)
+        setUserId(login?.userId)
+        setTtl(login?.ttl)
+        
+        // account id
+        setResAcctId(lev_residential_permissions()[0].residentialAccountId)
+        
+        // residence id
+        setResidence(lev_residences()[0].id)
+        
+        sendEvent(name: "commStatus", value: "good")
+    }
+    catch (Exception e)
+    {
+        logDebug("refreshTokens() failed: ${e.message}")
+        sendEvent(name: "commStatus", value: "error")
+        throw(e)
+    }
+    
+    // schedule next refresh, 1 hour before expiration
+    runIn(getTtl().toInteger() - 3600, refreshTokens)
+}
+
+def refreshSystemInfo()
+{
+    try
+    {
+        // switches info
+        setSwitches(lev_iot_switches())
+        
+        def switchesInfo = getSwitches()        
+        if(switchesInfo)
+        {
+            sendEvent(name: "commStatus", value: "good")
+            
+            def child
+            for(thisSwitch in switchesInfo)
+            {
+                logDebug("thisSwitch = ${thisSwitch}")
+                child = manageChildDevice(thisSwitch.name, thisSwitch.id)
+                if(child)
+                {
+                    // update child device
+                    logDebug("updating child: ${thisSwitch.name} with power: ${thisSwitch.power} and brightness: ${thisSwitch.brightness}")
+                    child.refreshFromMaster(thisSwitch.id, thisSwitch.power, thisSwitch.brightness, thisSwitch.rssi)
+                }
+            }
+        }
+    }
+    catch (Exception e)
+    {
+        logDebug("refreshSystemInfo() failed: ${e.message}")
+        sendEvent(name: "commStatus", value: "error")
+        throw(e)
+    }
+}
+
+def refreshFromChild()
+{
+    refreshSystemInfo()
+}
+
+def initialize()
+{
+    sendEvent(name: "commStatus", value: "unknown")
+    try
+    {
+        refreshTokens()
+        refresh()
+        sendEvent(name: "commStatus", value: "good")
+    }
+    catch (Exception e)
+    {
+        logDebug("initialize() failed")
+        sendEvent(name: "commStatus", value: "error")
+    }
+}
+
+def uninstalled()
+{
+    unschedule()
+}
+
+def refresh()
+{
+    unschedule(refresh)
+    
+    try
+    {
+        refreshSystemInfo()
+    }
+    catch (Exception e)
+    {
+        logDebug("refresh() failed")
+    }
+    
+    // schedule next refresh
+    runIn((60*refreshInterval.toFloat().toInteger()), refresh)
+}
+
+def checkCommStatus()
+{
+    switch(device.currentValue("commStatus"))
+    {
+        case "good":
+            logDebug("checkCommStatus() success")
+            return true
+        
+        case "error":
+        case "unknown":
+        default:
+            logDebug("checkCommStatus() failed")
+            return false
+    }
+}
+
+def setAuth(Id)
+{
+    state.Id = Id
+}
+
+def getAuth()
+{
+    return state.Id
+}
+
+def setUserId(userId)
+{
+    state.userId = userId
+}
+
+def getUserId()
+{
+    return state.userId
+}
+
+def setTtl(ttl)
+{
+    state.ttl = ttl
+}
+
+def getTtl()
+{
+    return state.ttl
+}
+
+def setResAcctId(acctId)
+{
+    state.acctId = acctId
+}
+
+def getResAcctId()
+{
+    return state.acctId
+}
+
+def setResidence(residence)
+{
+    state.residence = residence
+}
+
+def getResidence()
+{
+    return state.residence
+}
+
+def setSwitches(switches)
+{
+    state.switches = switches
+}
+
+def getSwitches()
+{
+    return state.switches
+}
+
+def lev_login()
+{
+    return httpExec("POST", genParamsLogin(), true)
+}
+
+def lev_logout()
+{
+    return httpExec("POST", genParamsMain("Person/logout"))   
+}
+
+def lev_residential_permissions()
+{
+    return httpExecWithAuthCheck("GET", genParamsMain("Person/${getUserId()}/residentialPermissions"), true)
+}
+
+def lev_residences()
+{
+    return httpExecWithAuthCheck("GET", genParamsMain("ResidentialAccounts/${getResAcctId()}/Residences"), true)
+}
+
+def lev_iot_switches()
+{
+    return httpExecWithAuthCheck("GET", genParamsMain("Residences/${getResidence()}/iotSwitches"), true)
+}
+
+def getUsername()
+{
+    return username
+}
+
+def getBaseURI()
+{
+    return "https://my.leviton.com/api/"
+}
+
+def findChildDevice(id)
+{
+    return getChildDevice(childDni(id))
+}
+
+def createChildDevice(name, id)
+{
+    return addChildDevice("My Leviton Switch/Dimmer", childDni(id), [label:"${childName(name)}", isComponent:true, name:"${childName(name)}"])
+}
+
+def manageChildDevice(name, id)
+{
+    logDebug("manageChildDevice(${name}, ${id})")
+    
+    def child = findChildDevice(id)
+    if(child)
+    {
+        // use existing child if it exists...
+        logDebug("found existing child: ${child}")
+    }
+    else
+    {
+        // create child if it didn't exist...
+        child = createChildDevice(name, id)
+        logDebug("created new child: ${child}")
+    }
+    
+    return child
+}
+
+def childName(name)
+{
+    return "${device.getName()}-${name.toString()}"
+}
+
+def childDni(id)
+{
+    return "${device.getName()}-${id.toString()}"
+}
+
+def genParamsLogin()
+{
+    def params =
+        [
+            uri: getBaseURI() + "Person/login",
+            body:
+            [
+                'email': username,
+                'password': password,
+                'clientId': 'levdb-echo-proto',
+                'registeredVia': 'myLeviton'
+            ],
+            contentType: 'application/json',
+        ]
+ 
+    return params
+}
+
+def genParamsMain(suffix, body = null)
+{
+    def params =
+        [
+            uri: getBaseURI() + suffix,
+            headers:
+            [
+                'Authorization': getAuth()
+            ],
+            contentType: 'application/json',
+        ]
+    
+    if(body)
+    {
+        params['body'] = body
+    }
+ 
+    return params
+}
+
+def httpGetExec(params, throwToCaller = false)
+{
+    logDebug("httpGetExec(${params})")
+    
+    try
+    {
+        def result
+        httpGet(params)
+        { resp ->
+            if (resp.data)
+            {
+                logDebug("resp.data = ${resp.data}")
+                result = resp.data
+            }
+        }
+        return result
+    }
+    catch (Exception e)
+    {
+        logDebug("httpGetExec() failed: ${e.message}")
+        if(throwToCaller)
+        {
+            throw(e)
+        }
+    }
+}
+
+def httpPostExec(params, throwToCaller = false)
+{
+    logDebug("httpPostExec(${params})")
+    
+    try
+    {
+        def result
+        httpPost(params)
+        { resp ->
+            if (resp.data)
+            {
+                logDebug("resp.data = ${resp.data}")
+                result = resp.data
+            }
+        }
+        return result
+    }
+    catch (Exception e)
+    {
+        logDebug("httpPostExec() failed: ${e.message}")
+        if(throwToCaller)
+        {
+            throw(e)
+        }
+    }
+}
+
+def httpExec(operation, params, throwToCaller = false)
+{
+    def res
+    
+    switch(operation)
+    {
+        default:
+            logDebug("unsupported Http operation")
+            break
+        
+        case "POST":
+            res = httpPostExec(params, throwToCaller)
+            break
+        
+        case "GET":
+            res = httpGetExec(params, throwToCaller)
+            break
+    }
+    
+    return res
+}
+
+def httpExecWithAuthCheck(operation, params, throwToCaller = false)
+{
+    def res
+    try
+    {
+        res = httpExec(operation, params, true)                
+        return res
+    }
+    catch (Exception e)
+    {
+        if(e.getResponse().getStatus().toInteger() == 401)
+        {
+            // 401 Unauthorized
+            try
+            {
+                logDebug("httpExecWithAuthCheck() auth failed.  retrying...")
+                
+                refreshTokens()                
+                
+                // update with new Auth token
+                params['headers']['Authorization'] = getAuth()
+                
+                res = httpExec(operation, params, true)
+                return res
+            }
+            catch (Exception e2)
+            {
+                logDebug("httpExecWithAuthCheck() failed: ${e2.message}")
+                if(throwToCaller)
+                {
+                    throw(e2)
+                }
+            }
+        }
+        else
+        {
+            if(throwToCaller)
+            {
+                throw(e)
+            }
+        }
+    }
+}
