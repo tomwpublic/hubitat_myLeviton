@@ -16,7 +16,8 @@ http://ihavenoknees.blogspot.com/2017/07/weekend-project-reverse-engineering.htm
 # Usage instructions:
 
 * Utilize the exposed switches and/or dimmers through any Hubitat app or extension.
-* Note that the states of switches or dimmers in child devices are refreshed from the master at a fixed interval.  Adjust the *Refresh interval (minutes)* input on the My Leviton System device as needed.
+* The states of switches or dimmers in child devices are refreshed from the master at a fixed interval.  This is the rate at which changes using the physical switches will be reflected.  Adjust the *Refresh interval (minutes)* input on the My Leviton System device as needed.  
+* The system states for all switches and dimmers is also refreshed immediately when any operation on any switch or dimmer is made via Hubitat.
 
 # Disclaimer
 
