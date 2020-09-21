@@ -90,7 +90,7 @@ def lev_update_switch(power, brightness = null)
         
         // wait a little while and then refresh
         unschedule()
-        runIn(2, refresh)
+        //runIn(2, refresh)
     }
     catch (Exception e)
     {
@@ -166,7 +166,7 @@ def httpPutExec(params, throwToCaller = false)
     try
     {
         def result
-        httpPut(params)
+        asynchttpPut("httpAsyncCallback", params)
         { resp ->
             if (resp.data)
             {
@@ -184,6 +184,18 @@ def httpPutExec(params, throwToCaller = false)
             throw(e)
         }
     }
+}
+
+def httpAsyncCallback(response, data)
+{
+    logDebug("httpAsyncCallback with status = ${response.getStatus()} from data = ${data}")
+    
+    if(!response.hasError())
+    {
+        def respData = response.getData()
+        logDebug("respData = ${respData}")
+        refreshFromMaster(switch_id, respData.power, respData.brightness, respData.rssi)
+    }  
 }
 
 def httpExec(operation, params, throwToCaller = false)
