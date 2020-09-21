@@ -165,16 +165,7 @@ def httpPutExec(params, throwToCaller = false)
     
     try
     {
-        def result
         asynchttpPut("httpAsyncCallback", params)
-        { resp ->
-            if (resp.data)
-            {
-                logDebug("resp.data = ${resp.data}")
-                result = resp.data
-            }
-        }
-        return result
     }
     catch (Exception e)
     {
