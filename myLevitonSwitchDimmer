@@ -20,8 +20,6 @@ metadata
 {
     definition(name: "My Leviton Switch/Dimmer", namespace: "tomw", author: "tomw", importUrl: "")
     {
-
-        capability "Initialize"
         capability "Refresh"
         capability "SignalStrength"
         capability "Switch"
@@ -46,14 +44,6 @@ def logDebug(msg)
     {
         log.debug(msg)
     }
-}
-
-def initialize()
-{
-    sendEvent(name: "commStatus", value: "unknown")
-    sendEvent(name: "switch", value: "unknown")
-    sendEvent(name: "level", value: "unknown")
-    sendEvent(name: "rssi", value: "unknown")
 }
 
 def refresh()
@@ -87,10 +77,6 @@ def lev_update_switch(power, brightness = null)
     {
         httpExecWithAuthCheck("PUT", genParamsMain("IotSwitches/${switch_id}", !brightness ? [power: power] : [power: power, brightness: brightness]), true)      
         sendEvent(name: "commStatus", value: "good")
-        
-        // wait a little while and then refresh
-        unschedule()
-        //runIn(2, refresh)
     }
     catch (Exception e)
     {
@@ -101,7 +87,7 @@ def lev_update_switch(power, brightness = null)
     return
 }
 
-def refreshFromMaster(id, power, brightness, rssi)
+def updateAttributes(id, power, brightness, rssi)
 {
     if(id.toString() != switch_id)
     {
@@ -183,9 +169,10 @@ def httpAsyncCallback(response, data)
     
     if(!response.hasError())
     {
-        def respData = response.getData()
+        def respData = response.getJson()
+        
         logDebug("respData = ${respData}")
-        refreshFromMaster(switch_id, respData.power, respData.brightness, respData.rssi)
+        updateAttributes(switch_id, respData.power, respData.brightness, respData.rssi)
     }  
 }
 
