@@ -34,7 +34,7 @@ preferences
     {
         input "username", "text", title: "Username (email)", required: true
         input "password", "password", title: "Password", required: true
-        input "refreshInterval", "number", title: "Refresh interval (minutes)", defaultValue: 1
+        input "refreshInterval", "number", title: "Refresh interval (seconds)", defaultValue: 30
         input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
     }
 }
@@ -163,7 +163,7 @@ def refresh()
     }
     
     // schedule next refresh
-    runIn((60*refreshInterval.toFloat().toInteger()), refresh)
+    runIn(refreshInterval.toFloat().toInteger(), refresh)
 }
 
 def checkCommStatus()
