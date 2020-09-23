@@ -75,8 +75,12 @@ def lev_update_switch(power, brightness = null)
 {
     try
     {
-        httpExecWithAuthCheck("PUT", genParamsMain("IotSwitches/${switch_id}", !brightness ? [power: power] : [power: power, brightness: brightness]), true)      
-        sendEvent(name: "commStatus", value: "good")
+        // only adjust if current values are different than requested values
+        if( (power == 'ON' ? "on" : "off") != (device.currentValue("switch")) || (brightness != device.currentValue("level")) )
+        {
+            httpExecWithAuthCheck("PUT", genParamsMain("IotSwitches/${switch_id}", !brightness ? [power: power] : [power: power, brightness: brightness]), true) 
+            sendEvent(name: "commStatus", value: "good")
+        }
     }
     catch (Exception e)
     {
