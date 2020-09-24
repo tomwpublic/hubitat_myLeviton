@@ -34,7 +34,7 @@ preferences
     section
     {
         input name: "switch_id", type: "text", title: "Switch ID", required: true
-        input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
+        input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: false
     }
 }
 
