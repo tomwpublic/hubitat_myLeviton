@@ -34,8 +34,8 @@ preferences
     {
         input "username", "text", title: "Username (email)", required: true
         input "password", "password", title: "Password", required: true
-        input "refreshInterval", "number", title: "Refresh interval (seconds)", defaultValue: 30
-        input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
+        input "refreshInterval", "number", title: "Refresh interval (seconds). 60s or longer is recommended value.", defaultValue: 60
+        input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: false
     }
 }
 
