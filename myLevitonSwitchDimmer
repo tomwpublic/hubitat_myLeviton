@@ -34,7 +34,8 @@ preferences
     section
     {
         input name: "switch_id", type: "text", title: "Switch ID", required: true
-        input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: false
+        input name: "suppressDupReq", type: "bool", title: "Attempt to suppress duplicate update requests?", defaultValue: false
+        input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
     }
 }
 
@@ -75,8 +76,8 @@ def lev_update_switch(power, brightness = null)
 {
     try
     {
-        // only adjust if current values are different than requested values
-        if( (power == 'ON' ? "on" : "off") != (device.currentValue("switch")) || (brightness != device.currentValue("level")) )
+        // only adjust if current values are different than requested values, or if driver option is disabled
+        if((!suppressDupReq || null == suppressDupReq) || (power == 'ON' ? "on" : "off") != (device.currentValue("switch")) || (brightness != device.currentValue("level")) )
         {
             httpExecWithAuthCheck("PUT", genParamsMain("IotSwitches/${switch_id}", !brightness ? [power: power] : [power: power, brightness: brightness]), true) 
             sendEvent(name: "commStatus", value: "good")
