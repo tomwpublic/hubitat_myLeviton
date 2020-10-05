@@ -26,6 +26,11 @@ metadata
         capability "SwitchLevel"
         
         attribute "commStatus", "string"
+        attribute "fadeOnTime", "number"
+        attribute "fadeOffTime", "number"
+        attribute "canSetLevel", "boolean"
+        
+        command "fadeTo", [[name: "Level", type: "NUMBER"], [name: "In seconds", type: "NUMBER"]]
     }
 }
 
@@ -69,7 +74,61 @@ def setLevel(level)
 
 def setLevel(level, duration)
 {
-    lev_update_switch('ON', level)
+    if (duration) {
+        fadeTo(level, duration)
+    }
+    else {
+        lev_update_switch(level == 0 ? 'OFF' : 'ON', level)
+    }
+}
+
+def fadeTo(level, duration) {
+    if (device.currentValue("canSetLevel")?.toBoolean()) {
+        def currFadeOnTime = device.currentValue("fadeOnTime").toInteger()
+        def currFadeOffTime = device.currentValue("fadeOffTime").toInteger()
+    
+        def state = (level == 0 ? 'OFF' : 'ON')
+    
+        try {
+            httpExecWithAuthCheck("PUT", genParamsMain("IotSwitches/${switch_id}", [fadeOnTime: duration * 10, fadeOffTime: duration * 10]), true, "fadeStart", [state: state, level: level, currFadeOnTime: currFadeOnTime, currFadeOffTime: currFadeOffTime])
+        }
+        catch (Exception e) {
+            logDebug("fadeTo failed: ${e.message}")
+            sendEvent(name: "commStatus", value: "error")
+        }
+    }
+}
+
+def fadeStart(response, data) {
+    logDebug("fadeStart with status = ${response.getStatus()} from data = ${data}")
+    
+    httpAsyncCallback(response, data)
+    if(!response.hasError())
+    {
+        try {
+            httpExecWithAuthCheck("PUT", genParamsMain("IotSwitches/${switch_id}", data.level == 0 ? [power: data.state] : [power: data.state, brightness: data.level]), true, "fadeDone", data)
+        }
+        catch (Exception e) {
+            logDebug("fadeTo failed: ${e.message}")
+           sendEvent(name: "commStatus", value: "error")
+        }
+    } 
+}
+
+def fadeDone(response, data) {
+    logDebug("fadeDone with status = ${response.getStatus()} from data = ${data}")
+    
+    httpAsyncCallback(response, data)
+    if(!response.hasError())
+    {
+        try {
+            httpExecWithAuthCheck("PUT", genParamsMain("IotSwitches/${switch_id}", [fadeOnTime: data.currFadeOnTime, fadeOffTime: data.currFadeOffTime]), true)
+        }
+        catch (Exception e) {
+            logDebug("fadeTo failed: ${e.message}")
+           sendEvent(name: "commStatus", value: "error")
+        }
+    } 
 }
 
 def lev_update_switch(power, brightness = null)
@@ -92,16 +151,38 @@ def lev_update_switch(power, brightness = null)
     return
 }
 
-def updateAttributes(id, power, brightness, rssi)
+def updateAttributes(id, switchData)
 {
     if(id.toString() != switch_id)
     {
         device.updateSetting("switch_id", id.toString())
     }
     
+    def power = switchData.power
+    def brightness = switchData.brightness
+    def rssi = switchData.rssi
+    def fadeOnTime = switchData.fadeOnTime
+    def fadeOffTime = switchData.fadeOffTime
+    def canSetLevel = switchData.canSetLevel ? switchData.canSetLevel.toBoolean() : false
+    
     sendEvent(name: "switch", value: (power == 'ON') ? "on" : "off")
     sendEvent(name: "level", value: brightness)
     sendEvent(name: "rssi", value: rssi.toInteger())
+    sendEvent(name: "canSetLevel", value: canSetLevel)
+    
+    if (fadeOnTime) {
+        sendEvent(name: "fadeOnTime", value: fadeOnTime.toInteger())
+    }
+    else if (canSetLevel) {
+        sendEvent(name: "fadeOnTime", value: 0)
+    }
+    
+    if (fadeOffTime) {
+        sendEvent(name: "fadeOffTime", value: fadeOffTime.toInteger())
+    }
+    else if (canSetLevel) {
+        sendEvent(name: "fadeOffTime", value: 0)
+    }
 }
 
 def requestRefresh()
@@ -150,13 +231,13 @@ def genParamsMain(suffix, body = null)
     return params
 }
 
-def httpPutExec(params, throwToCaller = false)
+def httpPutExec(params, throwToCaller = false, callback = "httpAsyncCallback", callbackData = null)
 {
     logDebug("httpPutExec(${params})")
     
     try
     {
-        asynchttpPut("httpAsyncCallback", params)
+        asynchttpPut(callback, params, callbackData)
     }
     catch (Exception e)
     {
@@ -177,11 +258,11 @@ def httpAsyncCallback(response, data)
         def respData = response.getJson()
         
         logDebug("respData = ${respData}")
-        updateAttributes(switch_id, respData.power, respData.brightness, respData.rssi)
+        updateAttributes(switch_id, respData)
     }  
 }
 
-def httpExec(operation, params, throwToCaller = false)
+def httpExec(operation, params, throwToCaller = false, callback = "httpAsyncCallback", callbackData = null)
 {
     def res
     
@@ -192,19 +273,19 @@ def httpExec(operation, params, throwToCaller = false)
             break
         
         case "PUT":
-            res = httpPutExec(params, throwToCaller)
+            res = httpPutExec(params, throwToCaller, callback, callbackData)
             break        
     }
     
     return res
 }
 
-def httpExecWithAuthCheck(operation, params, throwToCaller = false)
+def httpExecWithAuthCheck(operation, params, throwToCaller = false, callback = "httpAsyncCallback", callbackData = null)
 {
     def res
     try
     {
-        res = httpExec(operation, params, true)                
+        res = httpExec(operation, params, true, callback, callbackData)                
         return res
     }
     catch (Exception e)
