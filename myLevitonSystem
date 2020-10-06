@@ -284,7 +284,7 @@ def findChildDevice(id)
 
 def createChildDevice(name, id)
 {
-    return addChildDevice("My Leviton Switch/Dimmer", childDni(id), [label:"${childName(name)}", isComponent:true, name:"${childName(name)}"])
+    return addChildDevice("My Leviton Switch/Dimmer", childDni(id), [label:"${childName(name)}", isComponent:false, name:"${childName(name)}"])
 }
 
 def manageChildDevice(name, id)
