@@ -90,7 +90,7 @@ def fadeTo(level, duration) {
         def state = (level == 0 ? 'OFF' : 'ON')
     
         try {
-            httpExecWithAuthCheck("PUT", genParamsMain("IotSwitches/${switch_id}", [fadeOnTime: duration * 10, fadeOffTime: duration * 10]), true, "fadeStart", [state: state, level: level, currFadeOnTime: currFadeOnTime, currFadeOffTime: currFadeOffTime])
+            httpExecWithAuthCheck("PUT", genParamsMain("IotSwitches/${switch_id}", [fadeOnTime: duration * 10, fadeOffTime: duration * 10]), true, "fadeStart", [state: state, level: level, currFadeOnTime: currFadeOnTime, currFadeOffTime: currFadeOffTime, duration: duration])
         }
         catch (Exception e) {
             logDebug("fadeTo failed: ${e.message}")
@@ -121,14 +121,21 @@ def fadeDone(response, data) {
     httpAsyncCallback(response, data)
     if(!response.hasError())
     {
-        try {
-            httpExecWithAuthCheck("PUT", genParamsMain("IotSwitches/${switch_id}", [fadeOnTime: data.currFadeOnTime, fadeOffTime: data.currFadeOffTime]), true)
-        }
-        catch (Exception e) {
-            logDebug("fadeTo failed: ${e.message}")
-           sendEvent(name: "commStatus", value: "error")
-        }
-    } 
+        def seconds = data.duration.toInteger() * 2
+        logDebug("Scheduling restoreFadeTime for ${seconds}s with data=${data}")
+        runIn(seconds, "restoreFadeTime", [data: data])
+    }
+}
+
+def restoreFadeTime(data) {
+    try {
+        logDebug("restoreFadeTime with data=${data}")
+        httpExecWithAuthCheck("PUT", genParamsMain("IotSwitches/${switch_id}", [fadeOnTime: data.currFadeOnTime, fadeOffTime: data.currFadeOffTime]), true)
+    }
+    catch (Exception e) {
+        logDebug("fadeTo failed: ${e.message}")
+        sendEvent(name: "commStatus", value: "error")
+    }
 }
 
 def lev_update_switch(power, brightness = null)
