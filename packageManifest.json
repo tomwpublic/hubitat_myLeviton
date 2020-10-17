@@ -19,5 +19,7 @@
       "location": "https://raw.githubusercontent.com/tomwpublic/hubitat_myLeviton/master/myLevitonSwitchDimmer",
       "required": true
     }
-  ]
+  ],
+  "licenseFile": "https://github.com/tomwpublic/hubitat_myLeviton/blob/hpm-testing/LICENSE",
+  "releaseNotes": "https://github.com/tomwpublic/hubitat_myLeviton/blob/hpm-testing/README.md"
 }
