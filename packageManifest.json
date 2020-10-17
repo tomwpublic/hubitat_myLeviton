@@ -1,0 +1,27 @@
+{
+  "packageName": "hubitat_myLeviton",
+  "author": "tomw",
+  "version": "1.0.0",
+  "minimumHEVersion": "2.1.9",
+  "dateReleased": "2020-09-18",
+  "drivers": [
+    {
+      "id": "7367e327-fd8a-49be-9930-14939c2c37d5",
+      "name": "My Leviton System",
+      "namespace": "tomw",
+      "location": "https://raw.githubusercontent.com/tomwpublic/hubitat_myLeviton/master/myLevitonSystem",
+      "required": true
+    },
+    {
+      "id": "4d41cefc-b31b-488f-bbe0-8a6111f138c1",
+      "name": "My Leviton Switch/Dimmer",
+      "namespace": "tomw",
+      "location": "https://raw.githubusercontent.com/tomwpublic/hubitat_myLeviton/master/myLevitonSwitchDimmer",
+      "required": true
+    }
+  ],
+  "licenseFile": "https://raw.githubusercontent.com/tomwpublic/hubitat_myLeviton/hpm-testing/LICENSE",
+  "releaseNotes": "https://github.com/tomwpublic/hubitat_myLeviton/blob/hpm-testing/README.md",
+  "documentationLink": "https://github.com/tomwpublic/hubitat_myLeviton/blob/hpm-testing/README.md",
+  "communityLink": "https://community.hubitat.com/t/leviton-wifi-switches-dimmers/49793/11"
+}
