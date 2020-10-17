@@ -21,5 +21,6 @@
     }
   ],
   "licenseFile": "https://raw.githubusercontent.com/tomwpublic/hubitat_myLeviton/hpm-testing/LICENSE",
-  "releaseNotes": "https://github.com/tomwpublic/hubitat_myLeviton/blob/hpm-testing/README.md"
+  "releaseNotes": "https://github.com/tomwpublic/hubitat_myLeviton/blob/hpm-testing/README.md",
+  "documentationlink": "https://github.com/tomwpublic/hubitat_myLeviton/blob/hpm-testing/README.md"
 }
