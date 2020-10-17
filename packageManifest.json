@@ -22,5 +22,6 @@
   ],
   "licenseFile": "https://raw.githubusercontent.com/tomwpublic/hubitat_myLeviton/hpm-testing/LICENSE",
   "releaseNotes": "https://github.com/tomwpublic/hubitat_myLeviton/blob/hpm-testing/README.md",
-  "documentationLink": "https://github.com/tomwpublic/hubitat_myLeviton/blob/hpm-testing/README.md"
+  "documentationLink": "https://github.com/tomwpublic/hubitat_myLeviton/blob/hpm-testing/README.md",
+  "communityLink": "https://community.hubitat.com/t/leviton-wifi-switches-dimmers/49793/11"
 }
