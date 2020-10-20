@@ -14,6 +14,14 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
+-------------------------------------------
+
+Change history:
+
+1.1.0 - @dsegall - Added fadeTo feature and custom command.  Added support for duration parameter on setLevel command.
+1.0.0 - @tomw - Initial release
+
+
  */
 
 metadata
@@ -74,12 +82,7 @@ def setLevel(level)
 
 def setLevel(level, duration)
 {
-    if (duration) {
-        fadeTo(level, duration)
-    }
-    else {
-        lev_update_switch(level == 0 ? 'OFF' : 'ON', level)
-    }
+    fadeTo(level, duration)
 }
 
 def fadeTo(level, duration) {
@@ -101,10 +104,11 @@ def fadeTo(level, duration) {
 
 def fadeStart(response, data) {
     logDebug("fadeStart with status = ${response.getStatus()} from data = ${data}")
-    
-    httpAsyncCallback(response, data)
+
     if(!response.hasError())
     {
+        updateAttributes(switch_id, response.getJson())
+        
         try {
             httpExecWithAuthCheck("PUT", genParamsMain("IotSwitches/${switch_id}", data.level == 0 ? [power: data.state] : [power: data.state, brightness: data.level]), true, "fadeDone", data)
         }
@@ -117,10 +121,10 @@ def fadeStart(response, data) {
 
 def fadeDone(response, data) {
     logDebug("fadeDone with status = ${response.getStatus()} from data = ${data}")
-    
-    httpAsyncCallback(response, data)
+
     if(!response.hasError())
     {
+        updateAttributes(switch_id, response.getJson())
         def seconds = data.duration.toInteger() * 2
         logDebug("Scheduling restoreFadeTime for ${seconds}s with data=${data}")
         runIn(seconds, "restoreFadeTime", [data: data])
