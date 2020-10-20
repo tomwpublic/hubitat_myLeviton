@@ -21,7 +21,7 @@
     }
   ],
   "licenseFile": "https://raw.githubusercontent.com/tomwpublic/hubitat_myLeviton/master/LICENSE",
-  "releaseNotes": "https://raw.githubusercontent.com/tomwpublic/hubitat_myLeviton/master/README.md",
-  "documentationLink": "https://raw.githubusercontent.com/tomwpublic/hubitat_myLeviton/master/README.md",
+  "releaseNotes": "https://github.com/tomwpublic/hubitat_myLeviton/blob/master/README.md",
+  "documentationLink": "https://github.com/tomwpublic/hubitat_myLeviton/blob/master/README.md",
   "communityLink": "https://community.hubitat.com/t/leviton-wifi-switches-dimmers/49793/11"
 }
