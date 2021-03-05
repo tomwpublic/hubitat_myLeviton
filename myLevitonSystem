@@ -24,6 +24,9 @@ metadata
         capability "Initialize"
         capability "Refresh"
         
+        command "openEventSocket"
+        command "closeEventSocket"
+        
         attribute "commStatus", "string"
     }
 }
@@ -66,6 +69,8 @@ def refreshTokens()
     {
         // login id and userid
         def login = lev_login()
+        setLogin(login)
+        
         setAuth(login?.id)
         setUserId(login?.userId)
         setTtl(login?.ttl)
@@ -135,7 +140,8 @@ def initialize()
     {
         refreshTokens()
         refresh()
-        sendEvent(name: "commStatus", value: "good")
+        
+        openEventSocket()        
     }
     catch (Exception e)
     {
@@ -166,6 +172,83 @@ def refresh()
     runIn(refreshInterval.toFloat().toInteger(), refresh)
 }
 
+def openEventSocket()
+{
+    try
+    {
+        def headers = 
+        [
+            'Sec-WebSocket-Key': 'J4AAFNBWV3zbd71kD72LMQ==',
+            'Sec-WebSocket-Extensions': 'permessage-deflate',
+            Origin: 'https://my.leviton.com',
+            Connection: 'keep-alive, Upgrade',
+            Pragma: 'no-cache',
+            'Cache-Control': 'no-cache',
+            Upgrade: 'websocket',
+        ]
+        
+        interfaces.webSocket.connect("wss://my.leviton.com/socket/websocket", headers: headers, origin: 'https://my.leviton.com')
+        
+        sendEvent(name: "commStatus", value: "good")
+    }
+    catch (Exception e)
+    {
+        logDebug("error: ${e.message}")
+        sendEvent(name: "commStatus", value: "error")
+    }
+}
+
+def closeEventSocket()
+{
+    try
+    {
+        interfaces.webSocket.close()
+    }
+    catch (Exception e)
+    {
+        // swallow errors
+    }
+}
+
+def webSocketStatus(String message)
+{
+    logDebug("webSocketStatus: ${message}")
+}
+
+def parse(String message)
+{
+    logDebug("parse: ${message}")
+    
+    try
+    {
+        def msgJson = new groovy.json.JsonSlurper().parseText(message)
+        
+        if(msgJson?.type == "challenge")
+        {
+            interfaces.webSocket.sendMessage(new groovy.json.JsonOutput().toJson([token: getLogin()]))
+        }
+        
+        if(msgJson?.type == "status" && msgJson?.status == "ready")
+        {
+            for(thisSwitch in getSwitches())
+            {
+                interfaces.webSocket.sendMessage(new groovy.json.JsonOutput().toJson([type: 'subscribe', subscription: [modelName: 'IotSwitch', modelId: thisSwitch.id]]))
+            }
+        }
+        
+        if(msgJson?.type == "notification" && msgJson?.notification?.data?.power)
+        {
+            // just refresh all on any notification
+            refresh()
+        }
+    }
+
+    catch (Exception e)
+    {
+        // do something?
+    }
+}  
+
 def checkCommStatus()
 {
     switch(device.currentValue("commStatus"))
@@ -180,6 +263,16 @@ def checkCommStatus()
             logDebug("checkCommStatus() failed")
             return false
     }
+}
+
+def setLogin(login)
+{
+    state.login = login
+}
+
+def getLogin()
+{
+    return state.login
 }
 
 def setAuth(Id)
@@ -326,8 +419,8 @@ def genParamsLogin()
             [
                 'email': username,
                 'password': password,
-                'clientId': 'levdb-echo-proto',
-                'registeredVia': 'myLeviton'
+                'loggedInVia': 'myLeviton',
+                'rememberMe': true
             ],
             contentType: 'application/json',
         ]
