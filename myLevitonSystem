@@ -138,6 +138,8 @@ def initialize()
     sendEvent(name: "commStatus", value: "unknown")
     try
     {
+        closeEventSocket()
+        
         refreshTokens()
         refresh()
         
@@ -152,6 +154,7 @@ def initialize()
 
 def uninstalled()
 {
+    closeEventSocket()
     unschedule()
 }
 
