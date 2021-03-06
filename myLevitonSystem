@@ -197,7 +197,8 @@ def openEventSocket()
     catch (Exception e)
     {
         logDebug("error: ${e.message}")
-        sendEvent(name: "commStatus", value: "error")
+        sendEvent(name: "commStatus", value: "error")        
+        throw(e)
     }
 }
 
