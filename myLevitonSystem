@@ -204,11 +204,11 @@ def openEventSocket()
 
 def closeEventSocket()
 {
-    interfaces.webSocket.close()
-    state.wasExpectedClose = true
-    
+    setWasExpectedClose(true)
     // wait for state to catch up
     pauseExecution(500)
+    
+    interfaces.webSocket.close()
 }
 
 def webSocketStatus(String message)
@@ -221,16 +221,16 @@ def webSocketStatus(String message)
         sendEvent(name: "commStatus", value: "good")
         
         state.reconnectDelay = 1
-        state.wasExpectedClose = false
+        setWasExpectedClose(false)
         
         return
     }
     else if(message.startsWith("status: closing"))
     {
         sendEvent(name: "commStatus", value: "no events")
-        if(state.wasExpectedClose)
+        if(getWasExpectedClose())
         {
-            state.wasExpectedClose = false
+            setWasExpectedClose(false)
             return
         }
         
@@ -381,6 +381,16 @@ def setSwitches(switches)
 def getSwitches()
 {
     return state.switches
+}
+
+def setWasExpectedClose(wasExpected)
+{
+    state.wasExpectedClose = wasExpected
+}
+
+def getWasExpectedClose()
+{
+    return state.wasExpectedClose
 }
 
 def lev_login()
