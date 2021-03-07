@@ -18,6 +18,7 @@ limitations under the License.
 
 Change history:
 
+1.2.0 - @tomw - Update device statuses from websocket events.  No more polling.
 1.1.0 - @dsegall - Added fadeTo feature and custom command.  Added support for duration parameter on setLevel command.
 1.0.0 - @tomw - Initial release
 
@@ -176,19 +177,19 @@ def updateAttributes(id, switchData)
     def fadeOffTime = switchData.fadeOffTime
     def canSetLevel = switchData.canSetLevel ? switchData.canSetLevel.toBoolean() : false
     
-    sendEvent(name: "switch", value: (power == 'ON') ? "on" : "off")
-    sendEvent(name: "level", value: brightness)
-    sendEvent(name: "rssi", value: rssi.toInteger())
-    sendEvent(name: "canSetLevel", value: canSetLevel)
+    if(null != power) { sendEvent(name: "switch", value: (power == 'ON') ? "on" : "off") }
+    if(null != brightness) { sendEvent(name: "level", value: brightness) }
+    if(null != rssi) { sendEvent(name: "rssi", value: rssi.toInteger()) }
+    if(null != canSetLevel) { sendEvent(name: "canSetLevel", value: canSetLevel) }
     
-    if (fadeOnTime) {
+    if (null != fadeOnTime) {
         sendEvent(name: "fadeOnTime", value: fadeOnTime.toInteger())
     }
     else if (canSetLevel) {
         sendEvent(name: "fadeOnTime", value: 0)
     }
     
-    if (fadeOffTime) {
+    if (null != fadeOffTime) {
         sendEvent(name: "fadeOffTime", value: fadeOffTime.toInteger())
     }
     else if (canSetLevel) {
