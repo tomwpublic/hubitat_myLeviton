@@ -177,8 +177,14 @@ def updateAttributes(id, switchData)
     def fadeOffTime = switchData.fadeOffTime
     def canSetLevel = switchData.canSetLevel ? switchData.canSetLevel.toBoolean() : false
     
-    if(null != power) { sendEvent(name: "switch", value: (power == 'ON') ? "on" : "off") }
-    if(null != brightness) { sendEvent(name: "level", value: brightness) }
+    // from @dsegall:
+    //  physical updates always have a single message, with updates to power and/or brightness and chgType == 1
+    //  digital updates have two messages -- one first with power and/or brightness updated and a second one with chgType == 3
+    //    ...so, if we're going to update either power or brightness, we only need to check whether chgType == 1 to know which type
+    def isPhysical = (null != switchData.chgType) ? (1 == switchData.chgType) : true
+    if(null != power) { sendEvent(name: "switch", value: (power == 'ON') ? "on" : "off", type: (isPhysical ? "physical" : "digital")) }    
+    if(null != brightness) { sendEvent(name: "level", value: brightness, type: (isPhysical ? "physical" : "digital")) }
+    
     if(null != rssi) { sendEvent(name: "rssi", value: rssi.toInteger()) }
     if(null != canSetLevel) { sendEvent(name: "canSetLevel", value: canSetLevel) }
     
