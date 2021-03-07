@@ -142,9 +142,9 @@ def initialize()
         closeEventSocket()
         
         refreshTokens()
-        refresh()
+        openEventSocket()
         
-        openEventSocket()        
+        refresh()
     }
     catch (Exception e)
     {
@@ -281,10 +281,13 @@ def parse(String message)
             }
         }
         
-        if(msgJson?.type == "notification" && msgJson?.notification?.data?.power)
+        if(msgJson?.type == "notification")
         {
-            // just refresh all on any notification
-            refresh()
+            def child = findChildDevice(msgJson.notification?.modelId)
+            if(child)
+            {
+                child.updateAttributes(msgJson.notification.modelId, msgJson.notification.data)
+            }
         }
     }
 
