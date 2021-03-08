@@ -227,38 +227,58 @@ def closeEventSocket()
 
 def webSocketStatus(String message)
 {
-    logDebug("webSocketStatus: ${message}")
+    try {
+        logDebug("webSocketStatus: ${message}")
     
-    // thanks for the idea: https://community.hubitat.com/t/websocket-client/11843/15
-    if(message.startsWith("status: open"))
-    {        
-        sendEvent(name: "commStatus", value: "good")
+        // thanks for the idea: https://community.hubitat.com/t/websocket-client/11843/15
+        if(message.startsWith("status: open"))
+        {        
+            sendEvent(name: "commStatus", value: "good")
         
-        state.reconnectDelay = 1
-        setWasExpectedClose(false)
-        
-        return
-    }
-    else if(message.startsWith("status: closing"))
-    {
-        sendEvent(name: "commStatus", value: "no events")
-        if(getWasExpectedClose())
-        {
+            state.reconnectDelay = 1
             setWasExpectedClose(false)
+        
             return
         }
+        else if(message.startsWith("status: closing"))
+        {
+            sendEvent(name: "commStatus", value: "no events")
+            if(getWasExpectedClose())
+            {
+                setWasExpectedClose(false)
+                return
+            }
         
-        reinitialize()
+            reinitialize()
         
-        return
+            return
+        }
+        else if(message.startsWith("failure:"))
+        {
+            sendEvent(name: "commStatus", value: "error")        
+            reinitialize()
+        
+            return
+        }
     }
-    else if(message.startsWith("failure:"))
-    {
-        sendEvent(name: "commStatus", value: "error")        
-        reinitialize()
-        
-        return
+    finally {
+        updateLabel()
     }
+}
+
+def updateLabel() {
+    def label = device.getName()
+    switch (device.currentValue("commStatus")) {
+        case "good":
+            label += " (${getUsername()}; Online)"
+            break
+           
+        case "error":
+            label += " (${getUsername()}; Offline)"
+            break
+    }
+        
+    device.setLabel(label)
 }
 
 def reinitialize()
