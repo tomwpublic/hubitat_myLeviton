@@ -116,7 +116,7 @@ def refreshSystemInfo()
                 {
                     // update child device
                     logDebug("updating child: ${thisSwitch.name} with power: ${thisSwitch.power} and brightness: ${thisSwitch.brightness}")
-                    child.updateAttributes(thisSwitch.id, thisSwitch)
+                    child.updateAttributes(thisSwitch.id, thisSwitch, false, true)
                 }
             }
         }
