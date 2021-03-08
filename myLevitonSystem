@@ -14,7 +14,14 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
- */
+Change history:
+
+1.2.0 - @tomw + @dsegall - Update device statuses from websocket events.  No more polling.
+1.0.0 - @tomw - Initial release
+
+*/
+
+import java.util.ArrayList
 
 metadata
 {
@@ -34,7 +41,6 @@ preferences
     {
         input "username", "text", title: "Username (email)", required: true
         input "password", "password", title: "Password", required: true
-        input "refreshInterval", "number", title: "Refresh interval (seconds). 60s or longer is recommended value.", defaultValue: 60
         input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: false
     }
 }
@@ -66,6 +72,8 @@ def refreshTokens()
     {
         // login id and userid
         def login = lev_login()
+        setLogin(login)
+        
         setAuth(login?.id)
         setUserId(login?.userId)
         setTtl(login?.ttl)
@@ -91,6 +99,9 @@ def refreshTokens()
 
 def refreshSystemInfo()
 {
+    if (state.asyncQueue == null)
+        state.asyncQueue = new ArrayList()
+    
     try
     {
         // switches info
@@ -110,7 +121,7 @@ def refreshSystemInfo()
                 {
                     // update child device
                     logDebug("updating child: ${thisSwitch.name} with power: ${thisSwitch.power} and brightness: ${thisSwitch.brightness}")
-                    child.updateAttributes(thisSwitch.id, thisSwitch)
+                    child.updateAttributes(thisSwitch.id, thisSwitch, false, true)
                 }
             }
         }
@@ -120,6 +131,15 @@ def refreshSystemInfo()
         logDebug("refreshSystemInfo() failed: ${e.message}")
         sendEvent(name: "commStatus", value: "error")
         throw(e)
+    }
+    finally {
+        def queue = state.asyncQueue
+        if (queue != null) {
+            state.asyncQueue = null
+            for (queuedMsg in queue) {
+                parse(queuedMsg)
+            }
+        }
     }
 }
 
@@ -133,19 +153,25 @@ def initialize()
     sendEvent(name: "commStatus", value: "unknown")
     try
     {
+        closeEventSocket()
+        
         refreshTokens()
+        openEventSocket()
+        
         refresh()
-        sendEvent(name: "commStatus", value: "good")
     }
     catch (Exception e)
     {
         logDebug("initialize() failed")
         sendEvent(name: "commStatus", value: "error")
+        
+        reinitialize()
     }
 }
 
 def uninstalled()
 {
+    closeEventSocket()
     unschedule()
 }
 
@@ -161,10 +187,153 @@ def refresh()
     {
         logDebug("refresh() failed")
     }
-    
-    // schedule next refresh
-    runIn(refreshInterval.toFloat().toInteger(), refresh)
 }
+
+def openEventSocket()
+{
+    try
+    {
+        def headers = 
+        [
+            'Sec-WebSocket-Key': 'J4AAFNBWV3zbd71kD72LMQ==',
+            'Sec-WebSocket-Extensions': 'permessage-deflate',
+            Origin: 'https://my.leviton.com',
+            Connection: 'keep-alive, Upgrade',
+            Pragma: 'no-cache',
+            'Cache-Control': 'no-cache',
+            Upgrade: 'websocket',
+        ]
+        
+        interfaces.webSocket.connect("wss://my.leviton.com/socket/websocket", headers: headers, origin: 'https://my.leviton.com')
+        
+        sendEvent(name: "commStatus", value: "good")
+    }
+    catch (Exception e)
+    {
+        logDebug("error: ${e.message}")
+        sendEvent(name: "commStatus", value: "error")        
+        throw(e)
+    }
+}
+
+def closeEventSocket()
+{
+    setWasExpectedClose(true)
+    // wait for state to catch up
+    pauseExecution(500)
+    
+    interfaces.webSocket.close()
+}
+
+def webSocketStatus(String message)
+{
+    try {
+        logDebug("webSocketStatus: ${message}")
+    
+        // thanks for the idea: https://community.hubitat.com/t/websocket-client/11843/15
+        if(message.startsWith("status: open"))
+        {        
+            sendEvent(name: "commStatus", value: "good")
+        
+            state.reconnectDelay = 1
+            setWasExpectedClose(false)
+        
+            return
+        }
+        else if(message.startsWith("status: closing"))
+        {
+            sendEvent(name: "commStatus", value: "no events")
+            if(getWasExpectedClose())
+            {
+                setWasExpectedClose(false)
+                return
+            }
+        
+            reinitialize()
+        
+            return
+        }
+        else if(message.startsWith("failure:"))
+        {
+            sendEvent(name: "commStatus", value: "error")        
+            reinitialize()
+        
+            return
+        }
+    }
+    finally {
+        updateLabel()
+    }
+}
+
+def updateLabel() {
+    def label = device.getName()
+    switch (device.currentValue("commStatus")) {
+        case "good":
+            label += " (${getUsername()}; Online)"
+            break
+           
+        case "error":
+            label += " (${getUsername()}; Offline)"
+            break
+    }
+        
+    device.setLabel(label)
+}
+
+def reinitialize()
+{
+    // thanks @ogiewon for the example
+    
+    // first delay is 2 seconds, doubles every time
+    def delayCalc = (state.reconnectDelay ?: 1) * 2    
+    // upper limit is 600s
+    def reconnectDelay = delayCalc <= 600 ? delayCalc : 600
+    
+    state.reconnectDelay = reconnectDelay
+    runIn(reconnectDelay, initialize)
+}
+
+def parse(String message)
+{
+    logDebug("parse: ${message}")
+    if (state.asyncQueue != null) {
+        logDebug("Queueing message since a refresh is in progress")
+        state.asyncQueue.add(message)
+    }
+    
+    try
+    {
+        def msgJson = new groovy.json.JsonSlurper().parseText(message)
+        
+        if(msgJson?.type == "challenge")
+        {
+            interfaces.webSocket.sendMessage(new groovy.json.JsonOutput().toJson([token: getLogin()]))
+        }
+        
+        if(msgJson?.type == "status" && msgJson?.status == "ready")
+        {
+            for(thisSwitch in getSwitches())
+            {
+                interfaces.webSocket.sendMessage(new groovy.json.JsonOutput().toJson([type: 'subscribe', subscription: [modelName: 'IotSwitch', modelId: thisSwitch.id]]))
+            }
+        }
+        
+        if(msgJson?.type == "notification")
+        {
+            def child = findChildDevice(msgJson.notification?.modelId)
+            if(child)
+            {
+                child.updateAttributes(msgJson.notification.modelId, msgJson.notification.data)
+            }
+        }
+    }
+
+    catch (Exception e)
+    {
+        // do something?
+    }
+}  
 
 def checkCommStatus()
 {
@@ -180,6 +349,16 @@ def checkCommStatus()
             logDebug("checkCommStatus() failed")
             return false
     }
+}
+
+def setLogin(login)
+{
+    state.login = login
+}
+
+def getLogin()
+{
+    return state.login
 }
 
 def setAuth(Id)
@@ -240,6 +419,16 @@ def setSwitches(switches)
 def getSwitches()
 {
     return state.switches
+}
+
+def setWasExpectedClose(wasExpected)
+{
+    state.wasExpectedClose = wasExpected
+}
+
+def getWasExpectedClose()
+{
+    return state.wasExpectedClose
 }
 
 def lev_login()
@@ -326,8 +515,8 @@ def genParamsLogin()
             [
                 'email': username,
                 'password': password,
-                'clientId': 'levdb-echo-proto',
-                'registeredVia': 'myLeviton'
+                'loggedInVia': 'myLeviton',
+                'rememberMe': true
             ],
             contentType: 'application/json',
         ]
