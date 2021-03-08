@@ -21,7 +21,7 @@
     }
   ],
   "licenseFile": "https://raw.githubusercontent.com/tomwpublic/hubitat_myLeviton/master/LICENSE",
-  "releaseNotes": "1.2.0 - @tomw - Update device statuses from websocket events.  No more polling.\n1.1.0 - @dsegall - Added fadeTo feature and custom command.  Added support for duration parameter on setLevel command.\n1.0.0 - @tomw - Initial release.",
+  "releaseNotes": "1.2.0 - @tomw + @dsegall - Update device statuses from websocket events.  No more polling.\n1.1.0 - @dsegall - Added fadeTo feature and custom command.  Added support for duration parameter on setLevel command.\n1.0.0 - @tomw - Initial release.",
   "documentationLink": "https://github.com/tomwpublic/hubitat_myLeviton/blob/master/README.md",
   "communityLink": "https://community.hubitat.com/t/leviton-wifi-switches-dimmers/49793/11"
 }
