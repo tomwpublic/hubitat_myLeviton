@@ -16,7 +16,7 @@ limitations under the License.
 
 Change history:
 
-1.2.0 - @tomw - Update device statuses from websocket events.  No more polling.
+1.2.0 - @tomw + @dsegall - Update device statuses from websocket events.  No more polling.
 1.0.0 - @tomw - Initial release
 
 */
