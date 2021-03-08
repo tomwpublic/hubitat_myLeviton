@@ -4,7 +4,7 @@ This provides Switch, SwitchLevel, and SignalStrength (wifi connection) driver c
 
 Note that all operations have a cloud (internet) interaction.  This implementation is based on the work shared here: <br>
 https://gist.github.com/tlyakhov/4be20b588c4d34d9bd831c01c7594c92<br>
-http://ihavenoknees.blogspot.com/2017/07/weekend-project-reverse-engineering.html
+http://ihavenoknees.blogspot.com/2017/07/weekend-project-reverse-engineering.html<br>
 https://github.com/tabrindle/homebridge-leviton/pull/9
 
 # Installation instructions:
