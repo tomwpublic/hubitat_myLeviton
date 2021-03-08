@@ -21,6 +21,8 @@ Change history:
 
 */
 
+import java.util.ArrayList
+
 metadata
 {
     definition(name: "My Leviton System", namespace: "tomw", author: "tomw", importUrl: "")
@@ -97,6 +99,9 @@ def refreshTokens()
 
 def refreshSystemInfo()
 {
+    if (state.asyncQueue == null)
+        state.asyncQueue = new ArrayList()
+    
     try
     {
         // switches info
@@ -126,6 +131,15 @@ def refreshSystemInfo()
         logDebug("refreshSystemInfo() failed: ${e.message}")
         sendEvent(name: "commStatus", value: "error")
         throw(e)
+    }
+    finally {
+        def queue = state.asyncQueue
+        if (queue != null) {
+            state.asyncQueue = null
+            for (queuedMsg in queue) {
+                parse(queuedMsg)
+            }
+        }
     }
 }
 
