@@ -183,10 +183,12 @@ def updateAttributes(id, switchData, fromWebsocket = true, fullRefresh = false)
     def fadeOffTime = switchData.fadeOffTime
     def canSetLevel = switchData.canSetLevel ? switchData.canSetLevel.toBoolean() : false
     
-    // from @dsegall:
-    //  physical updates always have a single message, with updates to power and/or brightness and chgType == 1
-    //  digital updates have two messages -- one first with power and/or brightness updated and a second one with chgType == 3
-    //    ...so, if we're going to update either power or brightness, we only need to check whether chgType == 1 to know which type
+    //  physical updates always have a single message, with updates to power and/or brightness and chgReason == 1
+    //  digital updates have two messages -- first one with power and/or brightness but no chgReason and then one with chgReason == 3
+    //    ...so, if we're going to update either power or brightness, we only need to check whether chgReason == 1 to know which type
+    //    ...and when we don't know whether a change was physical or digital based on this logic, 
+    //       we just assume physical (presumably adjusted outside of Hubitat)
+    
     def isPhysical = fullRefresh ? true : (null != switchData.chgReason) ? (1 == switchData.chgReason) : false
     if(null != power) { sendEvent(name: "switch", value: (power == 'ON') ? "on" : "off", type: (isPhysical ? "physical" : "digital")) }    
     if(null != brightness) { sendEvent(name: "level", value: brightness, type: (isPhysical ? "physical" : "digital")) }
