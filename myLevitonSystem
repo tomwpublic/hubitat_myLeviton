@@ -21,6 +21,8 @@ Change history:
 
 */
 
+import java.util.ArrayList
+
 metadata
 {
     definition(name: "My Leviton System", namespace: "tomw", author: "tomw", importUrl: "")
@@ -97,6 +99,9 @@ def refreshTokens()
 
 def refreshSystemInfo()
 {
+    if (state.asyncQueue == null)
+        state.asyncQueue = new ArrayList()
+    
     try
     {
         // switches info
@@ -116,7 +121,7 @@ def refreshSystemInfo()
                 {
                     // update child device
                     logDebug("updating child: ${thisSwitch.name} with power: ${thisSwitch.power} and brightness: ${thisSwitch.brightness}")
-                    child.updateAttributes(thisSwitch.id, thisSwitch)
+                    child.updateAttributes(thisSwitch.id, thisSwitch, false, true)
                 }
             }
         }
@@ -126,6 +131,15 @@ def refreshSystemInfo()
         logDebug("refreshSystemInfo() failed: ${e.message}")
         sendEvent(name: "commStatus", value: "error")
         throw(e)
+    }
+    finally {
+        def queue = state.asyncQueue
+        if (queue != null) {
+            state.asyncQueue = null
+            for (queuedMsg in queue) {
+                parse(queuedMsg)
+            }
+        }
     }
 }
 
@@ -213,38 +227,58 @@ def closeEventSocket()
 
 def webSocketStatus(String message)
 {
-    logDebug("webSocketStatus: ${message}")
+    try {
+        logDebug("webSocketStatus: ${message}")
     
-    // thanks for the idea: https://community.hubitat.com/t/websocket-client/11843/15
-    if(message.startsWith("status: open"))
-    {        
-        sendEvent(name: "commStatus", value: "good")
+        // thanks for the idea: https://community.hubitat.com/t/websocket-client/11843/15
+        if(message.startsWith("status: open"))
+        {        
+            sendEvent(name: "commStatus", value: "good")
         
-        state.reconnectDelay = 1
-        setWasExpectedClose(false)
-        
-        return
-    }
-    else if(message.startsWith("status: closing"))
-    {
-        sendEvent(name: "commStatus", value: "no events")
-        if(getWasExpectedClose())
-        {
+            state.reconnectDelay = 1
             setWasExpectedClose(false)
+        
             return
         }
+        else if(message.startsWith("status: closing"))
+        {
+            sendEvent(name: "commStatus", value: "no events")
+            if(getWasExpectedClose())
+            {
+                setWasExpectedClose(false)
+                return
+            }
         
-        reinitialize()
+            reinitialize()
         
-        return
+            return
+        }
+        else if(message.startsWith("failure:"))
+        {
+            sendEvent(name: "commStatus", value: "error")        
+            reinitialize()
+        
+            return
+        }
     }
-    else if(message.startsWith("failure:"))
-    {
-        sendEvent(name: "commStatus", value: "error")        
-        reinitialize()
-        
-        return
+    finally {
+        updateLabel()
     }
+}
+
+def updateLabel() {
+    def label = device.getName()
+    switch (device.currentValue("commStatus")) {
+        case "good":
+            label += " (${getUsername()}; Online)"
+            break
+           
+        case "error":
+            label += " (${getUsername()}; Offline)"
+            break
+    }
+        
+    device.setLabel(label)
 }
 
 def reinitialize()
@@ -263,6 +297,10 @@ def reinitialize()
 def parse(String message)
 {
     logDebug("parse: ${message}")
+    if (state.asyncQueue != null) {
+        logDebug("Queueing message since a refresh is in progress")
+        state.asyncQueue.add(message)
+    }
     
     try
     {

@@ -108,7 +108,7 @@ def fadeStart(response, data) {
 
     if(!response.hasError())
     {
-        updateAttributes(switch_id, response.getJson())
+        updateAttributes(switch_id, response.getJson(), false)
         
         try {
             httpExecWithAuthCheck("PUT", genParamsMain("IotSwitches/${switch_id}", data.level == 0 ? [power: data.state] : [power: data.state, brightness: data.level]), true, "fadeDone", data)
@@ -125,7 +125,7 @@ def fadeDone(response, data) {
 
     if(!response.hasError())
     {
-        updateAttributes(switch_id, response.getJson())
+        updateAttributes(switch_id, response.getJson(), false)
         def seconds = data.duration.toInteger() * 2
         logDebug("Scheduling restoreFadeTime for ${seconds}s with data=${data}")
         runIn(seconds, "restoreFadeTime", [data: data])
@@ -163,8 +163,14 @@ def lev_update_switch(power, brightness = null)
     return
 }
 
-def updateAttributes(id, switchData)
+def updateAttributes(id, switchData, fromWebsocket = true, fullRefresh = false)
 {
+    if (fromWebsocket) {
+        def enabled = device.getDataValue("websocketProcessing")
+        if (enabled != null && !enabled.toBoolean())
+            return
+    }
+    
     if(id.toString() != switch_id)
     {
         device.updateSetting("switch_id", id.toString())
@@ -181,7 +187,7 @@ def updateAttributes(id, switchData)
     //  physical updates always have a single message, with updates to power and/or brightness and chgType == 1
     //  digital updates have two messages -- one first with power and/or brightness updated and a second one with chgType == 3
     //    ...so, if we're going to update either power or brightness, we only need to check whether chgType == 1 to know which type
-    def isPhysical = (null != switchData.chgType) ? (1 == switchData.chgType) : true
+    def isPhysical = fullRefresh ? true : (null != switchData.chgReason) ? (1 == switchData.chgReason) : false
     if(null != power) { sendEvent(name: "switch", value: (power == 'ON') ? "on" : "off", type: (isPhysical ? "physical" : "digital")) }    
     if(null != brightness) { sendEvent(name: "level", value: brightness, type: (isPhysical ? "physical" : "digital")) }
     
@@ -271,13 +277,18 @@ def httpAsyncCallback(response, data)
 {
     logDebug("httpAsyncCallback with status = ${response.getStatus()} from data = ${data}")
     
-    if(!response.hasError())
-    {
-        def respData = response.getJson()
+    try {
+        if(!response.hasError())
+        {
+            def respData = response.getJson()
         
-        logDebug("respData = ${respData}")
-        updateAttributes(switch_id, respData)
-    }  
+            logDebug("respData = ${respData}")
+            updateAttributes(switch_id, respData, false)
+        }  
+    }
+    finally {
+        device.removeDataValue("websocketProcessing")
+    }
 }
 
 def httpExec(operation, params, throwToCaller = false, callback = "httpAsyncCallback", callbackData = null)
