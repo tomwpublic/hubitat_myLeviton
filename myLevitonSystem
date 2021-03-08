@@ -277,6 +277,10 @@ def reinitialize()
 def parse(String message)
 {
     logDebug("parse: ${message}")
+    if (state.asyncQueue != null) {
+        logDebug("Queueing message since a refresh is in progress")
+        state.asyncQueue.add(message)
+    }
     
     try
     {
