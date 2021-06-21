@@ -4,7 +4,8 @@ This provides Switch, SwitchLevel, and SignalStrength (wifi connection) driver c
 
 Note that all operations have a cloud (internet) interaction.  This implementation is based on the work shared here: <br>
 https://gist.github.com/tlyakhov/4be20b588c4d34d9bd831c01c7594c92<br>
-http://ihavenoknees.blogspot.com/2017/07/weekend-project-reverse-engineering.html
+http://ihavenoknees.blogspot.com/2017/07/weekend-project-reverse-engineering.html<br>
+https://github.com/tabrindle/homebridge-leviton/pull/9
 
 # Installation instructions:
 
@@ -16,8 +17,9 @@ http://ihavenoknees.blogspot.com/2017/07/weekend-project-reverse-engineering.htm
 # Usage instructions:
 
 * Utilize the exposed switches and/or dimmers through any Hubitat app or extension.
-* The states of switches or dimmers in child devices are refreshed from the master at a fixed interval.  This is the rate at which changes using the physical switches will be reflected.  Adjust the *Refresh interval (minutes)* input on the My Leviton System device as needed.  
-* The system states for all switches and dimmers is also refreshed immediately when any operation on any switch or dimmer is made via Hubitat.
+* The states of switches or dimmers in child devices are updated when events are received from the My Leviton cloud.
+    * These events occur regardless of how the switch or dimmer is adjusted -- whether it was physically pressed or through software control.  This driver attempts to determine the source and log the event type as either 'physical' or 'digital'.
+    * You can also use the Refresh command on any child device or on the parent device to poll for updates.
 
 # Disclaimer
 
