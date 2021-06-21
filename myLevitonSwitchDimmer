@@ -181,7 +181,7 @@ def updateAttributes(id, switchData, fromWebsocket = true, fullRefresh = false)
     def rssi = switchData.rssi
     def fadeOnTime = switchData.fadeOnTime
     def fadeOffTime = switchData.fadeOffTime
-    def canSetLevel = switchData.canSetLevel ? switchData.canSetLevel.toBoolean() : false
+    def canSetLevel = switchData.canSetLevel == null ? null : switchData.canSetLevel.toBoolean()
     
     //  physical updates always have a single message, with updates to power and/or brightness and chgReason == 1
     //  digital updates have two messages -- first one with power and/or brightness but no chgReason and then one with chgReason == 3
