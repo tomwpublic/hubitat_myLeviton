@@ -42,6 +42,7 @@ preferences
         input "username", "text", title: "Username (email)", required: true
         input "password", "password", title: "Password", required: true
         input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: false
+        input name: "includeStatusInLabel", type: "bool", title: "Include status in device label", defaultValue: true
     }
 }
 
@@ -268,14 +269,16 @@ def webSocketStatus(String message)
 
 def updateLabel() {
     def label = device.getName()
-    switch (device.currentValue("commStatus")) {
-        case "good":
-            label += " (${getUsername()}; Online)"
-            break
+    if (includeStatusInLabel) {
+        switch (device.currentValue("commStatus")) {
+            case "good":
+                label += " (${getUsername()}; Online)"
+                break
            
-        case "error":
-            label += " (${getUsername()}; Offline)"
-            break
+            case "error":
+                label += " (${getUsername()}; Offline)"
+                break
+        }
     }
         
     device.setLabel(label)
