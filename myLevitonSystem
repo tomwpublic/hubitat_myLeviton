@@ -16,8 +16,9 @@ limitations under the License.
 
 Change history:
 
-1.2.0 - @tomw + @dsegall - Update device statuses from websocket events.  No more polling.
-1.0.0 - @tomw - Initial release
+1.3.0 - dsegall - added support for detecting when a switch disconnects from MyLeviton
+1.2.0 - tomw + dsegall - Update device statuses from websocket events.  No more polling.
+1.0.0 - tomw - Initial release
 
 */
 
