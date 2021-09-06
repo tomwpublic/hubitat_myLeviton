@@ -18,6 +18,7 @@ limitations under the License.
 
 Change history:
 
+1.3.0 - @dsegall - added support for detecting when a switch disconnects from MyLeviton
 1.2.1 - @dsegall - bugfix for canSetLevel issue
 1.2.0 - @tomw + @dsegall - Update device statuses from websocket events.  No more polling.
 1.1.0 - @dsegall - Added fadeTo feature and custom command.  Added support for duration parameter on setLevel command.
@@ -36,6 +37,7 @@ metadata
         capability "SwitchLevel"
         
         attribute "commStatus", "string"
+        attribute "connected", "enum", ["true", "false"]
         attribute "fadeOnTime", "number"
         attribute "fadeOffTime", "number"
         attribute "canSetLevel", "boolean"
@@ -183,6 +185,7 @@ def updateAttributes(id, switchData, fromWebsocket = true, fullRefresh = false)
     def fadeOnTime = switchData.fadeOnTime
     def fadeOffTime = switchData.fadeOffTime
     def canSetLevel = switchData.canSetLevel == null ? null : switchData.canSetLevel.toBoolean()
+    String connected = switchData.connected
     
     //  physical updates always have a single message, with updates to power and/or brightness and chgReason == 1
     //  digital updates have two messages -- first one with power and/or brightness but no chgReason and then one with chgReason == 3
@@ -210,6 +213,8 @@ def updateAttributes(id, switchData, fromWebsocket = true, fullRefresh = false)
     else if (canSetLevel) {
         sendEvent(name: "fadeOffTime", value: 0)
     }
+    
+    sendEvent(name: "connected", value: connected)
 }
 
 def requestRefresh()
