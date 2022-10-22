@@ -16,6 +16,7 @@ limitations under the License.
 
 Change history:
 
+1.4.0 - mingaldrichgan - added My Leviton Fan driver for DW4SF
 1.3.0 - dsegall - added support for detecting when a switch disconnects from MyLeviton
 1.2.0 - tomw + dsegall - Update device statuses from websocket events.  No more polling.
 1.0.0 - tomw - Initial release
@@ -118,7 +119,7 @@ def refreshSystemInfo()
             for(thisSwitch in switchesInfo)
             {
                 logDebug("thisSwitch = ${thisSwitch}")
-                child = manageChildDevice(thisSwitch.name, thisSwitch.id)
+                child = manageChildDevice(thisSwitch.name, thisSwitch.id, thisSwitch.customType)
                 if(child)
                 {
                     // update child device
@@ -475,12 +476,13 @@ def findChildDevice(id)
     return getChildDevice(childDni(id))
 }
 
-def createChildDevice(name, id)
+def createChildDevice(name, id, customType)
 {
-    return addChildDevice("My Leviton Switch/Dimmer", childDni(id), [label:"${childName(name)}", isComponent:false, name:"${childName(name)}"])
+    def deviceType = (customType == "ceiling-fan") ? "My Leviton Fan" : "My Leviton Switch/Dimmer"
+    return addChildDevice(deviceType, childDni(id), [label:childName(name), isComponent:false, name:deviceType])
 }
 
-def manageChildDevice(name, id)
+def manageChildDevice(name, id, customType)
 {
     logDebug("manageChildDevice(${name}, ${id})")
     
@@ -493,7 +495,7 @@ def manageChildDevice(name, id)
     else
     {
         // create child if it didn't exist...
-        child = createChildDevice(name, id)
+        child = createChildDevice(name, id, customType)
         logDebug("created new child: ${child}")
     }
     

@@ -29,12 +29,13 @@ Change history:
 
 metadata
 {
-    definition(name: "My Leviton Switch/Dimmer", namespace: "tomw", author: "tomw", importUrl: "")
+    definition(name: "My Leviton Fan", namespace: "tomw", author: "tomw", importUrl: "")
     {
         capability "Refresh"
         capability "SignalStrength"
         capability "Switch"
         capability "SwitchLevel"
+        capability "FanControl"
         
         attribute "commStatus", "string"
         attribute "connected", "enum", ["true", "false"]
@@ -77,6 +78,33 @@ def on()
 def off()
 {
     lev_update_switch('OFF')
+}
+
+// Credit: https://github.com/ernie/hubitat/blob/main/drivers/leviton-zw4sf.groovy#L141-L166
+def setSpeed(speed)
+{
+  logDebug "setSpeed: ${speed}"
+
+  switch (speed) {
+    case ["low", "medium-low"]:
+      setLevel(25)
+      break
+    case "medium":
+      setLevel(50)
+      break
+    case "medium-high":
+      setLevel(75)
+      break
+    case "high":
+      setLevel(100)
+      break
+    case ["on", "auto"]:
+      return on()
+    case "off":
+      return off()
+    default:
+      logDebug "Invalid speed: ${speed}"
+  }
 }
 
 def setLevel(level)
