@@ -16,6 +16,7 @@ limitations under the License.
 
 Change history:
 
+1.3.1 - dsegall - removed Sec-Websocket-Extensions header; generate random websocket key for each connection
 1.3.0 - dsegall - added support for detecting when a switch disconnects from MyLeviton
 1.2.0 - tomw + dsegall - Update device statuses from websocket events.  No more polling.
 1.0.0 - tomw - Initial release
@@ -23,6 +24,7 @@ Change history:
 */
 
 import java.util.ArrayList
+import java.util.Random
 
 metadata
 {
@@ -197,8 +199,8 @@ def openEventSocket()
     {
         def headers = 
         [
-            'Sec-WebSocket-Key': 'J4AAFNBWV3zbd71kD72LMQ==',
-            'Sec-WebSocket-Extensions': 'permessage-deflate',
+            'Sec-WebSocket-Key': generateWebsocketKey(),
+            //'Sec-WebSocket-Extensions': 'permessage-deflate',
             Origin: 'https://my.leviton.com',
             Connection: 'keep-alive, Upgrade',
             Pragma: 'no-cache',
@@ -216,6 +218,18 @@ def openEventSocket()
         sendEvent(name: "commStatus", value: "error")        
         throw(e)
     }
+}
+
+String generateWebsocketKey() {
+    Random random = new Random()
+    StringBuilder sb = new StringBuilder()
+    for (int i = 0; i < 16; i++) {
+        sb.append((char)(random.nextInt(95) + 32))
+    }
+    
+    String base64 = sb.toString().bytes.encodeBase64().toString()
+    logDebug("websocket key is: ${base64}")
+    return base64
 }
 
 def closeEventSocket()
