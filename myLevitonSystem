@@ -29,6 +29,7 @@ import java.util.Random
 import groovy.transform.Field
 
 @Field static Map<Long, Boolean> expectedCloseMap = new java.util.concurrent.ConcurrentHashMap<Long, Boolean>()
+@Field static Map<Long, Integer> reconnectDelayMap = new java.util.concurrent.ConcurrentHashMap<Long, Integer>()
 
 metadata
 {
@@ -196,10 +197,11 @@ def reconnectWebSocket()
         
         logDebug("Reconnecting WebSocket using existing auth token...")
         closeEventSocket()
-        openEventSocket()
         
-        // Refresh switch states in case anything changed while disconnected
+        // IMPORTANT: Run refreshSystemInfo() BEFORE openEventSocket()!
+        // Running it after openEventSocket() causes an 8-second thread overlap that overwrites state.reconnectDelay!
         refreshSystemInfo()
+        openEventSocket()
     }
     catch (Exception e)
     {
@@ -267,32 +269,34 @@ def webSocketStatus(String message)
     try {
         logDebug("webSocketStatus: ${message}")
     
-        // thanks for the idea: https://community.hubitat.com/t/websocket-client/11843/15
         if(message.startsWith("status: open"))
         {        
             sendEvent(name: "commStatus", value: "good")
         
-            state.reconnectDelay = 1
+            setReconnectDelay(1)
             setWasExpectedClose(false)
         
             return
         }
         else if(message.startsWith("status: closing"))
         {
-            sendEvent(name: "commStatus", value: "no events")
             if(getWasExpectedClose())
             {
                 setWasExpectedClose(false)
                 return
             }
-        
+            
+            sendEvent(name: "commStatus", value: "no events")
             reinitialize()
         
             return
         }
         else if(message.startsWith("failure:"))
         {
-            sendEvent(name: "commStatus", value: "error")        
+            // Only mark commStatus as error if we've already failed at least one reconnect attempt (delay > 2)
+            if (getReconnectDelay() > 2) {
+                sendEvent(name: "commStatus", value: "error")
+            }
             reinitialize()
         
             return
@@ -325,13 +329,25 @@ def reinitialize()
     unschedule(initialize)
     unschedule(reconnectWebSocket)
     
-    // first delay is 2 seconds, doubles every time up to 600s
-    def delayCalc = (state.reconnectDelay ?: 1) * 2    
-    def reconnectDelay = delayCalc <= 600 ? delayCalc : 600
+    int currentDelay = getReconnectDelay()
+    int delayCalc = currentDelay * 2
+    int reconnectDelay = delayCalc <= 600 ? delayCalc : 600
     
-    state.reconnectDelay = reconnectDelay
+    setReconnectDelay(reconnectDelay)
     logDebug("Reconnecting in ${reconnectDelay} seconds...")
     runIn(reconnectDelay, reconnectWebSocket)
+}
+
+def setReconnectDelay(int delay)
+{
+    reconnectDelayMap[device.idAsLong] = delay
+    state.reconnectDelay = delay
+}
+
+int getReconnectDelay()
+{
+    Integer val = reconnectDelayMap[device.idAsLong]
+    return (val != null) ? val : (state.reconnectDelay ?: 1)
 }
 
 def parse(String message)
