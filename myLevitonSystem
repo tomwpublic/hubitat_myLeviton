@@ -16,6 +16,7 @@ limitations under the License.
 
 Change history:
 
+1.3.2 - dsegall - updates for new okhttp library
 1.3.1 - dsegall - removed Sec-Websocket-Extensions header; generate random websocket key for each connection
 1.3.0 - dsegall - added support for detecting when a switch disconnects from MyLeviton
 1.2.0 - tomw + dsegall - Update device statuses from websocket events.  No more polling.
@@ -25,6 +26,10 @@ Change history:
 
 import java.util.ArrayList
 import java.util.Random
+import groovy.transform.Field
+
+@Field static Map<Long, Boolean> expectedCloseMap = new java.util.concurrent.ConcurrentHashMap<Long, Boolean>()
+@Field static Map<Long, Integer> reconnectDelayMap = new java.util.concurrent.ConcurrentHashMap<Long, Integer>()
 
 metadata
 {
@@ -35,6 +40,8 @@ metadata
         capability "Refresh"
         
         attribute "commStatus", "enum", ["unknown", "good", "error"]
+        
+        command "removeChildDevice", [[name: "id", type:"STRING"]]
     }
 }
 
@@ -98,7 +105,9 @@ def refreshTokens()
     }
     
     // schedule next refresh, 1 hour before expiration
-    runIn(getTtl().toInteger() - 3600, refreshTokens)
+    int delay = getTtl().toInteger() - 3600
+    logDebug("refresh in ${delay}")
+    runIn(delay, refreshTokens)
 }
 
 def refreshSystemInfo()
@@ -154,20 +163,51 @@ def refreshFromChild()
 
 def initialize()
 {
+    unschedule(initialize)
+    unschedule(reconnectWebSocket)
     sendEvent(name: "commStatus", value: "unknown")
     try
     {
         closeEventSocket()
         
         refreshTokens()
+        refreshSystemInfo() // Populate state.switches and throw if HTTP fails
         openEventSocket()
-        
-        refresh()
     }
     catch (Exception e)
     {
-        logDebug("initialize() failed")
+        logDebug("initialize() failed: ${e.message}")
         sendEvent(name: "commStatus", value: "error")
+        updateLabel()
+        
+        reinitialize()
+    }
+}
+
+def reconnectWebSocket()
+{
+    unschedule(reconnectWebSocket)
+    try
+    {
+        // If we don't have a valid login token or switch list yet, do a full initialize()
+        if (!getAuth() || !getLogin() || !getSwitches()) {
+            initialize()
+            return
+        }
+        
+        logDebug("Reconnecting WebSocket using existing auth token...")
+        closeEventSocket()
+        
+        // IMPORTANT: Run refreshSystemInfo() BEFORE openEventSocket()!
+        // Running it after openEventSocket() causes an 8-second thread overlap that overwrites state.reconnectDelay!
+        refreshSystemInfo()
+        openEventSocket()
+    }
+    catch (Exception e)
+    {
+        logDebug("reconnectWebSocket() failed: ${e.message}")
+        sendEvent(name: "commStatus", value: "error")
+        updateLabel()
         
         reinitialize()
     }
@@ -197,18 +237,12 @@ def openEventSocket()
 {
     try
     {
-        def headers = 
-        [
-            'Sec-WebSocket-Key': generateWebsocketKey(),
-            //'Sec-WebSocket-Extensions': 'permessage-deflate',
-            Origin: 'https://my.leviton.com',
-            Connection: 'keep-alive, Upgrade',
-            Pragma: 'no-cache',
-            'Cache-Control': 'no-cache',
-            Upgrade: 'websocket',
-        ]
-        
-        interfaces.webSocket.connect("wss://my.leviton.com/socket/websocket", headers: headers, origin: 'https://my.leviton.com')
+        // Let OkHttp generate Sec-WebSocket-Key, Upgrade, and Connection headers automatically.
+        // Explicitly set pingInterval (in seconds) to prevent idle NAT/load-balancer drops.
+        interfaces.webSocket.connect(
+            "wss://my.leviton.com/socket/websocket",
+            origin: "https://my.leviton.com"
+        )
         
         sendEvent(name: "commStatus", value: "good")
     }
@@ -220,25 +254,14 @@ def openEventSocket()
     }
 }
 
-String generateWebsocketKey() {
-    Random random = new Random()
-    StringBuilder sb = new StringBuilder()
-    for (int i = 0; i < 16; i++) {
-        sb.append((char)(random.nextInt(95) + 32))
-    }
-    
-    String base64 = sb.toString().bytes.encodeBase64().toString()
-    logDebug("websocket key is: ${base64}")
-    return base64
-}
-
 def closeEventSocket()
 {
     setWasExpectedClose(true)
-    // wait for state to catch up
-    pauseExecution(500)
-    
     interfaces.webSocket.close()
+    // Give the old socket 1 second to finish closing before opening a new one
+    pauseExecution(1000)
+    // Reset to false so it never stays stuck as true if refreshTokens() fails or the hub reboots
+    setWasExpectedClose(false)
 }
 
 def webSocketStatus(String message)
@@ -246,32 +269,34 @@ def webSocketStatus(String message)
     try {
         logDebug("webSocketStatus: ${message}")
     
-        // thanks for the idea: https://community.hubitat.com/t/websocket-client/11843/15
         if(message.startsWith("status: open"))
         {        
             sendEvent(name: "commStatus", value: "good")
         
-            state.reconnectDelay = 1
+            setReconnectDelay(1)
             setWasExpectedClose(false)
         
             return
         }
         else if(message.startsWith("status: closing"))
         {
-            sendEvent(name: "commStatus", value: "no events")
             if(getWasExpectedClose())
             {
                 setWasExpectedClose(false)
                 return
             }
-        
+            
+            sendEvent(name: "commStatus", value: "no events")
             reinitialize()
         
             return
         }
         else if(message.startsWith("failure:"))
         {
-            sendEvent(name: "commStatus", value: "error")        
+            // Only mark commStatus as error if we've already failed at least one reconnect attempt (delay > 2)
+            if (getReconnectDelay() > 2) {
+                sendEvent(name: "commStatus", value: "error")
+            }
             reinitialize()
         
             return
@@ -301,15 +326,28 @@ def updateLabel() {
 
 def reinitialize()
 {
-    // thanks @ogiewon for the example
+    unschedule(initialize)
+    unschedule(reconnectWebSocket)
     
-    // first delay is 2 seconds, doubles every time
-    def delayCalc = (state.reconnectDelay ?: 1) * 2    
-    // upper limit is 600s
-    def reconnectDelay = delayCalc <= 600 ? delayCalc : 600
+    int currentDelay = getReconnectDelay()
+    int delayCalc = currentDelay * 2
+    int reconnectDelay = delayCalc <= 600 ? delayCalc : 600
     
-    state.reconnectDelay = reconnectDelay
-    runIn(reconnectDelay, initialize)
+    setReconnectDelay(reconnectDelay)
+    logDebug("Reconnecting in ${reconnectDelay} seconds...")
+    runIn(reconnectDelay, reconnectWebSocket)
+}
+
+def setReconnectDelay(int delay)
+{
+    reconnectDelayMap[device.idAsLong] = delay
+    state.reconnectDelay = delay
+}
+
+int getReconnectDelay()
+{
+    Integer val = reconnectDelayMap[device.idAsLong]
+    return (val != null) ? val : (state.reconnectDelay ?: 1)
 }
 
 def parse(String message)
@@ -349,7 +387,7 @@ def parse(String message)
 
     catch (Exception e)
     {
-        // do something?
+        logDebug("parse() exception: ${e.message}")
     }
 }  
 
@@ -439,14 +477,16 @@ def getSwitches()
     return state.switches
 }
 
-def setWasExpectedClose(wasExpected)
+def setWasExpectedClose(Boolean wasExpected)
 {
+    expectedCloseMap[device.idAsLong] = wasExpected
     state.wasExpectedClose = wasExpected
 }
 
 def getWasExpectedClose()
 {
-    return state.wasExpectedClose
+    Boolean val = expectedCloseMap[device.idAsLong]
+    return (val != null) ? val : (state.wasExpectedClose ?: false)
 }
 
 def lev_login()
@@ -494,6 +534,12 @@ def createChildDevice(name, id)
     return addChildDevice("My Leviton Switch/Dimmer", childDni(id), [label:"${childName(name)}", isComponent:false, name:"${childName(name)}"])
 }
 
+void removeChildDevice(id) {
+    String dni = childDni(id)
+    log.info "Removing device ${dni}"
+    deleteChildDevice(dni)
+}
+
 def manageChildDevice(name, id)
 {
     logDebug("manageChildDevice(${name}, ${id})")
@@ -529,6 +575,10 @@ def genParamsLogin()
     def params =
         [
             uri: getBaseURI() + "Person/login",
+            headers:
+            [
+                'Connection': 'close'
+            ],
             body:
             [
                 'email': username,
@@ -537,6 +587,7 @@ def genParamsLogin()
                 'rememberMe': true
             ],
             contentType: 'application/json',
+            timeout: 15
         ]
  
     return params
@@ -549,9 +600,11 @@ def genParamsMain(suffix, body = null)
             uri: getBaseURI() + suffix,
             headers:
             [
-                'Authorization': getAuth()
+                'Authorization': getAuth(),
+                'Connection': 'close'
             ],
             contentType: 'application/json',
+            timeout: 15
         ]
     
     if(body)
@@ -648,7 +701,9 @@ def httpExecWithAuthCheck(operation, params, throwToCaller = false)
     }
     catch (Exception e)
     {
-        if(e.getResponse().getStatus().toInteger() == 401)
+        // Safely check for 401 without throwing NullPointerException on non-HTTP exceptions (like JSON lexing errors)
+        def status = e.metaClass.respondsTo(e, "getResponse") ? e.getResponse()?.getStatus()?.toInteger() : null
+        if(status == 401)
         {
             // 401 Unauthorized
             try
